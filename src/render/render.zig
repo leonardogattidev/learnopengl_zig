@@ -139,10 +139,18 @@ pub fn update(ctx: *Context) !void {
         const renderable = render.renderables.items[0];
         render.context.program.bind(renderable.material.program);
 
-        try render.context.program.setVec3(gpa, "objectColor", &.{ 1, 0.5, 0.31 });
-        try render.context.program.setVec3(gpa, "lightColor", &.{ 1, 1, 1 });
-        try render.context.program.setVec3(gpa, "lightPos", &lightPosition.data);
-        try render.context.program.setVec3(gpa, "viewPos", &render.camera.position.data);
+        const coral_color: Vec3 = .vec3(1, 0.5, 0.31);
+
+        const objectColor = coral_color;
+
+        try render.context.program.setVec3(gpa, "light.position", &lightPosition.data);
+        try render.context.program.setVec3(gpa, "light.ambient", &.{ 0.2, 0.2, 0.2 });
+        try render.context.program.setVec3(gpa, "light.diffuse", &.{ 0.5, 0.5, 0.5 });
+        try render.context.program.setVec3(gpa, "light.specular", &.{ 1, 1, 1 });
+        try render.context.program.setVec3(gpa, "material.ambient", &objectColor.data);
+        try render.context.program.setVec3(gpa, "material.diffuse", &objectColor.data);
+        try render.context.program.setVec3(gpa, "material.specular", &.{ 0.5, 0.5, 0.5 });
+        try render.context.program.setFloat(gpa, "material.shininess", 32);
 
         var model: Mat4 = .identity;
         const rotate = @mod(elapsedSecs + 355, 360);

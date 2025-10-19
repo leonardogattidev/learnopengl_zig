@@ -6,11 +6,19 @@ out vec3 vNormal;
 out vec3 vFragPos;
 out vec3 vLightPos;
 
-uniform vec3 lightPos;
-
 uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
+
+struct Light {
+  vec3 position;
+
+  vec3 ambient;
+  vec3 diffuse;
+  vec3 specular;
+};
+
+uniform Light light;
 
 void main(){
   vec4 local = vec4(aPos,1.0);
@@ -18,5 +26,5 @@ void main(){
   gl_Position = projection * view * world_pos;
   vFragPos = vec3(view * world_pos);
   vNormal = mat3(transpose(inverse(view * model))) * aNormal;
-  vLightPos = vec3(view * vec4(lightPos,1.0));
+  vLightPos = vec3(view * vec4(light.position,1.0));
 }

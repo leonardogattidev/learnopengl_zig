@@ -36,6 +36,7 @@ pub const vertices: []const f32 = &.{
     -0.5, 0.5,  0.5,  0.0,  1.0,  0.0,
     -0.5, 0.5,  -0.5, 0.0,  1.0,  0.0,
 };
+
 // pub const Vertex = struct {
 //     position: [3]f32,
 //     // color: [3]f32,
