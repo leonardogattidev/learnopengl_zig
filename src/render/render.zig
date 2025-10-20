@@ -208,7 +208,7 @@ fn processCameraInput(ctx: *Context) void {
     const camera_sensitivity = 0.1;
     const view_input = &ctx.appstate.render.view_input;
     view_input.yaw += mouse_x * camera_sensitivity;
-    view_input.pitch -= @max(@min(mouse_y * camera_sensitivity, 89), -89);
+    view_input.pitch = @max(@min(view_input.pitch - mouse_y * camera_sensitivity, 89), -89);
     std.log.info(
         \\yaw = {}
         \\pitch = {}
