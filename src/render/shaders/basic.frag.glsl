@@ -11,7 +11,7 @@ uniform vec3 lightColor;
 
 struct Material {
   sampler2D diffuse;
-  vec3 specular;
+  sampler2D specular;
   float shininess;
 };
 
@@ -40,9 +40,8 @@ void main(){
   vec3 reflectionDir = reflect(-lightDir, norm);
   float reflectionAngle = max(dot(viewDir, reflectionDir), 0.0);
   float spec = pow(reflectionAngle, material.shininess);
-  vec3 specular = light.specular * (spec * material.specular);
+  vec3 specularSample = vec3(texture(material.specular, vTexCoords));
+  vec3 specular = light.specular * (spec * specularSample);
 
-  vec3 result = ambient + diffuse + specular;
-
-  FragColor = vec4(result, 1.0);
+  FragColor = vec4(ambient + diffuse + specular, 1.0);
 }

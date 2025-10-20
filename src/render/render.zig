@@ -81,33 +81,40 @@ pub fn setup(ctx: *Context) !void {
     context.vao.unbind();
     context.buffers.unbind(.element_array);
 
-    const img1 = try assets.decodeImage(@embedFile("../assets/container2.png"));
-    // set active tex unit
-    // create tex obj
-    // bind tex obj
-    // set data
-    // generate mipmaps
+    const diffuse_map_img = try assets.decodeImage(@embedFile("../assets/container2.png"));
     try context.textures.setActive(gpa, 0);
     const tex1 = resources.textures.create();
-    std.log.debug("tex1 handle = {}", .{tex1.handle});
     context.textures.bind(.tex_2d, tex1);
-    context.textures.setImage2D(.tex_2d, img1);
+    context.textures.setImage2D(.tex_2d, diffuse_map_img);
     context.textures.generateMipmap(.tex_2d);
-    std.log.debug("unit = {}", .{getIntegerV(gl.ACTIVE_TEXTURE) - gl.TEXTURE0});
-    std.log.debug("bind = {}", .{getIntegerV(gl.TEXTURE_BINDING_2D)});
+
+    const specular_map_img = try assets.decodeImage(@embedFile("../assets/container2_specular.png"));
+    const tex2 = resources.textures.create();
+    context.textures.bind(.tex_2d, tex2);
+    context.textures.setImage2D(.tex_2d, specular_map_img);
+    context.textures.generateMipmap(.tex_2d);
     context.textures.bind(.tex_2d, .zero);
 
     const basic_renderable_textures = texbinds: {
         const TextureBindings = Renderable.Material.TextureBindings;
-        const texture_bindings = try gpa.alloc(TextureBindings, 1);
-        const bindings = try gpa.alloc(TextureBindings.Binding, 1);
+        const texture_bindings = try gpa.alloc(TextureBindings, 2);
+        const bindings1 = try gpa.alloc(TextureBindings.Binding, 1);
+        const bindings2 = try gpa.alloc(TextureBindings.Binding, 1);
         texture_bindings[0] = TextureBindings{
             .texture_unit = 0,
-            .textures = bindings,
+            .textures = bindings1,
         };
-        bindings[0] = TextureBindings.Binding{
+        bindings1[0] = TextureBindings.Binding{
             .target = .tex_2d,
             .texture = tex1,
+        };
+        texture_bindings[1] = TextureBindings{
+            .texture_unit = 1,
+            .textures = bindings2,
+        };
+        bindings2[0] = TextureBindings.Binding{
+            .target = .tex_2d,
+            .texture = tex2,
         };
         break :texbinds texture_bindings;
     };
@@ -185,7 +192,7 @@ pub fn update(ctx: *Context) !void {
         try render.context.program.setVec3(gpa, "light.diffuse", &.{ 0.5, 0.5, 0.5 });
         try render.context.program.setVec3(gpa, "light.specular", &.{ 1, 1, 1 });
         try render.context.program.setInt(gpa, "material.diffuse", 0);
-        try render.context.program.setVec3(gpa, "material.specular", &.{ 0.5, 0.5, 0.5 });
+        try render.context.program.setInt(gpa, "material.specular", 1);
         try render.context.program.setFloat(gpa, "material.shininess", 32);
 
         var model: Mat4 = .identity;
