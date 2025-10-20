@@ -1,4 +1,5 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 pub const State = @import("State.zig");
 const engine = @import("engine");
 const gl = engine.gl;
@@ -179,18 +180,21 @@ pub fn update(ctx: *Context) !void {
     const gpa = ctx.appstate.allocator;
 
     processCameraInput(ctx);
-    const view: Mat4 = render.camera.viewMat4();
+    render.view = render.camera.viewMat4();
 
-    const lightPosition: Vec3 = .vec3(1.2, 1, 2);
+    const light_position: Vec3 = .vec3(1.2, 1, 2);
 
     {
         const renderable = render.renderables.items[0];
         render.context.program.bind(renderable.material.program);
 
-        try render.context.program.setVec3(gpa, "light.position", &lightPosition.data);
+        try render.context.program.setVec3(gpa, "light.position", &light_position.data);
         try render.context.program.setVec3(gpa, "light.ambient", &.{ 0.2, 0.2, 0.2 });
         try render.context.program.setVec3(gpa, "light.diffuse", &.{ 0.5, 0.5, 0.5 });
         try render.context.program.setVec3(gpa, "light.specular", &.{ 1, 1, 1 });
+        try render.context.program.setFloat(gpa, "light.constant", 1);
+        try render.context.program.setFloat(gpa, "light.linear", 0.09);
+        try render.context.program.setFloat(gpa, "light.quadratic", 0.032);
         try render.context.program.setInt(gpa, "material.diffuse", 0);
         try render.context.program.setInt(gpa, "material.specular", 1);
         try render.context.program.setFloat(gpa, "material.shininess", 32);
@@ -200,27 +204,33 @@ pub fn update(ctx: *Context) !void {
         // std.log.info("rotate = {}", .{rotate});
         model.rotate(math.radians(rotate * 20), .vec3(0, 1, 0));
         try render.context.program.setMat4(gpa, "model", @ptrCast(&model));
-        try render.context.program.setMat4(gpa, "view", @ptrCast(&view));
+        try render.context.program.setMat4(gpa, "view", @ptrCast(&render.view));
         try render.context.program.setMat4(gpa, "projection", @ptrCast(&render.projection));
 
         try renderable.draw(gpa, &render.context);
     }
 
     {
-        const renderable = render.renderables.items[1];
-        render.context.program.bind(renderable.material.program);
-
-        var model: Mat4 = .identity;
-        model.translate(lightPosition);
-        model.scale(.vec3(0.2, 0.2, 0.2));
-        try render.context.program.setMat4(gpa, "model", @ptrCast(&model));
-        try render.context.program.setMat4(gpa, "view", @ptrCast(&view));
-        try render.context.program.setMat4(gpa, "projection", @ptrCast(&render.projection));
-
-        try renderable.draw(gpa, &render.context);
+        try renderLightSourceCube(ctx, light_position);
     }
 
     _ = sdl.SDL_GL_SwapWindow(appstate.window);
+}
+fn renderLightSourceCube(ctx: *Context, light_position: Vec3) !void {
+    const gpa = ctx.appstate.allocator;
+    const render = &ctx.appstate.render;
+    const context = &render.context;
+    const renderable = render.renderables.items[1];
+    context.program.bind(renderable.material.program);
+
+    var model: Mat4 = .identity;
+    model.translate(light_position);
+    model.scale(.vec3(0.2, 0.2, 0.2));
+    try context.program.setMat4(gpa, "model", @ptrCast(&model));
+    try context.program.setMat4(gpa, "view", @ptrCast(&render.view));
+    try context.program.setMat4(gpa, "projection", @ptrCast(&render.projection));
+
+    try renderable.draw(gpa, context);
 }
 
 fn processCameraInput(ctx: *Context) void {
