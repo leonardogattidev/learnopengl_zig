@@ -30,7 +30,7 @@ pub fn setup(ctx: *Context) !void {
     );
     const light_source_program_key = try resources.programs.newVF(
         gpa,
-        @ptrCast(@embedFile("shaders/basic.vert.glsl")),
+        @ptrCast(@embedFile("shaders/light_source.vert.glsl")),
         @ptrCast(@embedFile("shaders/light_source.frag.glsl")),
     );
 
@@ -41,7 +41,8 @@ pub fn setup(ctx: *Context) !void {
     context.buffers.setData(.array, vertex_data.vertices, .static_draw);
     //
 
-    const vbo_stride = 6 * @sizeOf(f32);
+    const vbo_stride = 8 * @sizeOf(f32);
+    // LIGHTING VAO
     const basic_vao = context.vao.create();
     context.vao.bind(basic_vao);
     context.vao.attributePointer(.{
@@ -58,6 +59,14 @@ pub fn setup(ctx: *Context) !void {
         .stride = vbo_stride,
     });
     context.vao.enableVertexAttribArray(1);
+    context.vao.attributePointer(.{
+        .index = 2,
+        .size = 2,
+        .pointer = @sizeOf(f32) * 6,
+        .stride = vbo_stride,
+    });
+    context.vao.enableVertexAttribArray(2);
+    //
 
     const light_source_vao = context.vao.create();
     context.vao.bind(light_source_vao);
@@ -72,9 +81,41 @@ pub fn setup(ctx: *Context) !void {
     context.vao.unbind();
     context.buffers.unbind(.element_array);
 
+    const img1 = try assets.decodeImage(@embedFile("../assets/container2.png"));
+    // set active tex unit
+    // create tex obj
+    // bind tex obj
+    // set data
+    // generate mipmaps
+    try context.textures.setActive(gpa, 0);
+    const tex1 = resources.textures.create();
+    std.log.debug("tex1 handle = {}", .{tex1.handle});
+    context.textures.bind(.tex_2d, tex1);
+    context.textures.setImage2D(.tex_2d, img1);
+    context.textures.generateMipmap(.tex_2d);
+    std.log.debug("unit = {}", .{getIntegerV(gl.ACTIVE_TEXTURE) - gl.TEXTURE0});
+    std.log.debug("bind = {}", .{getIntegerV(gl.TEXTURE_BINDING_2D)});
+    context.textures.bind(.tex_2d, .zero);
+
+    const basic_renderable_textures = texbinds: {
+        const TextureBindings = Renderable.Material.TextureBindings;
+        const texture_bindings = try gpa.alloc(TextureBindings, 1);
+        const bindings = try gpa.alloc(TextureBindings.Binding, 1);
+        texture_bindings[0] = TextureBindings{
+            .texture_unit = 0,
+            .textures = bindings,
+        };
+        bindings[0] = TextureBindings.Binding{
+            .target = .tex_2d,
+            .texture = tex1,
+        };
+        break :texbinds texture_bindings;
+    };
+
     const basic_renderable = Renderable{
         .material = .{
             .program = basic_program_key,
+            .textures = basic_renderable_textures,
         },
         .mesh = .{
             .vao = basic_vao,
@@ -139,22 +180,17 @@ pub fn update(ctx: *Context) !void {
         const renderable = render.renderables.items[0];
         render.context.program.bind(renderable.material.program);
 
-        const coral_color: Vec3 = .vec3(1, 0.5, 0.31);
-
-        const objectColor = coral_color;
-
         try render.context.program.setVec3(gpa, "light.position", &lightPosition.data);
         try render.context.program.setVec3(gpa, "light.ambient", &.{ 0.2, 0.2, 0.2 });
         try render.context.program.setVec3(gpa, "light.diffuse", &.{ 0.5, 0.5, 0.5 });
         try render.context.program.setVec3(gpa, "light.specular", &.{ 1, 1, 1 });
-        try render.context.program.setVec3(gpa, "material.ambient", &objectColor.data);
-        try render.context.program.setVec3(gpa, "material.diffuse", &objectColor.data);
+        try render.context.program.setInt(gpa, "material.diffuse", 0);
         try render.context.program.setVec3(gpa, "material.specular", &.{ 0.5, 0.5, 0.5 });
         try render.context.program.setFloat(gpa, "material.shininess", 32);
 
         var model: Mat4 = .identity;
         const rotate = @mod(elapsedSecs + 355, 360);
-        std.log.info("rotate = {}", .{rotate});
+        // std.log.info("rotate = {}", .{rotate});
         model.rotate(math.radians(rotate * 20), .vec3(0, 1, 0));
         try render.context.program.setMat4(gpa, "model", @ptrCast(&model));
         try render.context.program.setMat4(gpa, "view", @ptrCast(&view));

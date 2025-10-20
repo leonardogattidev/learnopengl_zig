@@ -3,14 +3,14 @@
 in vec3 vNormal;
 in vec3 vFragPos;
 in vec3 vLightPos;
+in vec2 vTexCoords;
 
 out vec4 FragColor;
 
 uniform vec3 lightColor;
 
 struct Material {
-  vec3 ambient;
-  vec3 diffuse;
+  sampler2D diffuse;
   vec3 specular;
   float shininess;
 };
@@ -28,12 +28,13 @@ struct Light {
 uniform Light light;
 
 void main(){
-  vec3 ambient = light.ambient * material.ambient;
+  vec3 diffuseSample = vec3(texture(material.diffuse, vTexCoords));
+  vec3 ambient = light.ambient * diffuseSample;
 
   vec3 norm = normalize(vNormal);
   vec3 lightDir = normalize(vLightPos - vFragPos);
   float diff = max(dot(norm, lightDir), 0.0);
-  vec3 diffuse = light.diffuse * (diff * material.diffuse);
+  vec3 diffuse = light.diffuse * diff * diffuseSample;
 
   vec3 viewDir = normalize(-vFragPos);
   vec3 reflectionDir = reflect(-lightDir, norm);
