@@ -182,27 +182,24 @@ pub fn update(ctx: *Context) !void {
 
     const light_position: Vec3 = .vec3(1.2, 1, 2);
 
-    {
-        try renderCubes(ctx, light_position);
-    }
+    try renderCubes(ctx);
 
-    {
-        try renderLightSourceCube(ctx, light_position);
-    }
+    try renderLightSourceCube(ctx, light_position);
 
     _ = sdl.SDL_GL_SwapWindow(appstate.window);
 }
 
-fn renderCubes(ctx: *Context, light_position: Vec3) !void {
+fn renderCubes(ctx: *Context) !void {
     const render = &ctx.appstate.render;
     const renderable = render.renderables.items[0];
     render.context.program.bind(renderable.material.program);
 
     const gpa = ctx.appstate.allocator;
-    try render.context.program.setVec3(gpa, "light.position", &light_position.data);
-    try render.context.program.setVec3(gpa, "light.ambient", &.{ 0.2, 0.2, 0.2 });
-    try render.context.program.setVec3(gpa, "light.diffuse", &.{ 0.5, 0.5, 0.5 });
-    try render.context.program.setVec3(gpa, "light.specular", &.{ 1, 1, 1 });
+    try render.context.program.setFloat(gpa, "light.cutoff", @cos(math.radians(12.5)));
+    try render.context.program.setFloat(gpa, "light.outer_cutoff", @cos(math.radians(13.5)));
+    try render.context.program.setVec3(gpa, "light.ambient", .{ 0.2, 0.2, 0.2 });
+    try render.context.program.setVec3(gpa, "light.diffuse", .{ 0.5, 0.5, 0.5 });
+    try render.context.program.setVec3(gpa, "light.specular", .{ 1, 1, 1 });
     try render.context.program.setFloat(gpa, "light.constant", 1);
     try render.context.program.setFloat(gpa, "light.linear", 0.09);
     try render.context.program.setFloat(gpa, "light.quadratic", 0.032);

@@ -2,7 +2,6 @@
 
 in vec3 vNormal;
 in vec3 vFragPos;
-in vec3 vLightPos;
 in vec2 vTexCoords;
 
 out vec4 FragColor;
@@ -18,7 +17,8 @@ struct Material {
 uniform Material material;
 
 struct Light {
-  vec3 position;
+  float cutoff;
+  float outer_cutoff;
 
   vec3 ambient;
   vec3 diffuse;
@@ -31,29 +31,35 @@ struct Light {
 
 uniform Light light;
 
-void main(){
-  vec3 fragToLight = vLightPos - vFragPos;
-  float fragToLightDistance = length(fragToLight);
-  float attenuation = 1.0 / (
-      light.constant + light.linear *
-      fragToLightDistance + light.quadratic *
-      (fragToLightDistance * fragToLightDistance));
+void main() {
+  vec3 diffuse_sample = texture(material.diffuse, vTexCoords).rgb;
+  vec3 ambient = light.ambient * diffuse_sample;
 
-  vec3 diffuseSample = texture(material.diffuse, vTexCoords).rgb;
-  vec3 ambient = light.ambient * diffuseSample * attenuation;
+  vec3 frag_to_light = -vFragPos;
+  vec3 frag_to_light_dir = normalize(frag_to_light);
 
   vec3 norm = normalize(vNormal);
-  vec3 lightDir = normalize(fragToLight);
-  float diff = max(dot(norm, lightDir), 0.0);
-  vec3 diffuse = light.diffuse * diff * diffuseSample;
+  float diff = max(dot(norm, frag_to_light_dir), 0.0);
+  vec3 diffuse = light.diffuse * diff * diffuse_sample;
 
-  vec3 viewDir = normalize(-vFragPos);
-  vec3 reflectionDir = reflect(-lightDir, norm);
-  float reflectionAngle = max(dot(viewDir, reflectionDir), 0.0);
-  float spec = pow(reflectionAngle, material.shininess);
-  vec3 specularSample = texture(material.specular, vTexCoords).rgb;
-  vec3 specular = light.specular * (spec * specularSample);
+  vec3 reflection_dir = reflect(-frag_to_light_dir, norm);
+  float reflection_angle = max(dot(frag_to_light_dir, reflection_dir), 0.0);
+  float spec = pow(reflection_angle, material.shininess);
+  vec3 specular_sample = texture(material.specular, vTexCoords).rgb;
+  vec3 specular = light.specular * (spec * specular_sample);
 
+  vec3 spotlight_orientation = vec3(0.0, 0.0, -1.0); // normalized
+  float theta = dot(frag_to_light_dir, -spotlight_orientation);
+  float epsilon = light.cutoff - light.outer_cutoff;
+  float intensity = clamp((theta - light.outer_cutoff) / epsilon, 0.0, 1.0);
+  diffuse *= intensity;
+  specular *= intensity;
+
+  float frag_to_light_dist = length(frag_to_light);
+  float attenuation = 1.0 / (
+      light.constant + light.linear *
+          frag_to_light_dist + light.quadratic *
+          (frag_to_light_dist * frag_to_light_dist));
   ambient *= attenuation;
   diffuse *= attenuation;
   specular *= attenuation;
