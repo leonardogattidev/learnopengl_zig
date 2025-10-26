@@ -174,10 +174,8 @@ pub fn update(ctx: *Context) !void {
     const appstate = &ctx.appstate;
     gl.ClearColor(6.0 / 255.0, 21.0 / 255.0, 88.0 / 255.0, 1);
     gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    const elapsedSecs: f32 = @floatCast(ctx.elapsedSeconds());
 
     const render = &appstate.render;
-    const gpa = ctx.appstate.allocator;
 
     processCameraInput(ctx);
     render.view = render.camera.viewMat4();
@@ -185,29 +183,7 @@ pub fn update(ctx: *Context) !void {
     const light_position: Vec3 = .vec3(1.2, 1, 2);
 
     {
-        const renderable = render.renderables.items[0];
-        render.context.program.bind(renderable.material.program);
-
-        try render.context.program.setVec3(gpa, "light.position", &light_position.data);
-        try render.context.program.setVec3(gpa, "light.ambient", &.{ 0.2, 0.2, 0.2 });
-        try render.context.program.setVec3(gpa, "light.diffuse", &.{ 0.5, 0.5, 0.5 });
-        try render.context.program.setVec3(gpa, "light.specular", &.{ 1, 1, 1 });
-        try render.context.program.setFloat(gpa, "light.constant", 1);
-        try render.context.program.setFloat(gpa, "light.linear", 0.09);
-        try render.context.program.setFloat(gpa, "light.quadratic", 0.032);
-        try render.context.program.setInt(gpa, "material.diffuse", 0);
-        try render.context.program.setInt(gpa, "material.specular", 1);
-        try render.context.program.setFloat(gpa, "material.shininess", 32);
-
-        var model: Mat4 = .identity;
-        const rotate = @mod(elapsedSecs + 355, 360);
-        // std.log.info("rotate = {}", .{rotate});
-        model.rotate(math.radians(rotate * 20), .vec3(0, 1, 0));
-        try render.context.program.setMat4(gpa, "model", @ptrCast(&model));
-        try render.context.program.setMat4(gpa, "view", @ptrCast(&render.view));
-        try render.context.program.setMat4(gpa, "projection", @ptrCast(&render.projection));
-
-        try renderable.draw(gpa, &render.context);
+        try renderCubes(ctx, light_position);
     }
 
     {
@@ -216,6 +192,53 @@ pub fn update(ctx: *Context) !void {
 
     _ = sdl.SDL_GL_SwapWindow(appstate.window);
 }
+
+fn renderCubes(ctx: *Context, light_position: Vec3) !void {
+    const render = &ctx.appstate.render;
+    const renderable = render.renderables.items[0];
+    render.context.program.bind(renderable.material.program);
+
+    const gpa = ctx.appstate.allocator;
+    try render.context.program.setVec3(gpa, "light.position", &light_position.data);
+    try render.context.program.setVec3(gpa, "light.ambient", &.{ 0.2, 0.2, 0.2 });
+    try render.context.program.setVec3(gpa, "light.diffuse", &.{ 0.5, 0.5, 0.5 });
+    try render.context.program.setVec3(gpa, "light.specular", &.{ 1, 1, 1 });
+    try render.context.program.setFloat(gpa, "light.constant", 1);
+    try render.context.program.setFloat(gpa, "light.linear", 0.09);
+    try render.context.program.setFloat(gpa, "light.quadratic", 0.032);
+    try render.context.program.setInt(gpa, "material.diffuse", 0);
+    try render.context.program.setInt(gpa, "material.specular", 1);
+    try render.context.program.setFloat(gpa, "material.shininess", 32);
+
+    try render.context.program.setMat4(gpa, "view", @ptrCast(&render.view));
+    try render.context.program.setMat4(gpa, "projection", @ptrCast(&render.projection));
+
+    const cubes_positions: []const Vec3 = &.{
+        .vec3(0.0, 0.0, 0.0),
+        .vec3(2.0, 5.0, -15.0),
+        .vec3(-1.5, -2.2, -2.5),
+        .vec3(-3.8, -2.0, -12.3),
+        .vec3(2.4, -0.4, -3.5),
+        .vec3(-1.7, 3.0, -7.5),
+        .vec3(1.3, -2.0, -2.5),
+        .vec3(1.5, 2.0, -2.5),
+        .vec3(1.5, 0.2, -1.5),
+        .vec3(-1.3, 1.0, -1.5),
+    };
+    for (0..cubes_positions.len, cubes_positions) |idx, pos| {
+        var model: Mat4 = .identity;
+        model.translate(pos);
+        const elapsedSecs = ctx.elapsedS(f32);
+        const i: f32 = @floatFromInt(idx);
+        const rotate = @mod(elapsedSecs * (i + 1), 360);
+        // std.log.info("rotate = {}", .{rotate});
+        model.rotate(math.radians(rotate * 20), .vec3(0, 1, 0));
+        try render.context.program.setMat4(gpa, "model", @ptrCast(&model));
+
+        try renderable.draw(gpa, &render.context);
+    }
+}
+
 fn renderLightSourceCube(ctx: *Context, light_position: Vec3) !void {
     const gpa = ctx.appstate.allocator;
     const render = &ctx.appstate.render;
