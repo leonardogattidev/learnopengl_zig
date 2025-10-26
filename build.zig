@@ -3,7 +3,7 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    const mod = b.addModule("game", .{
+    const mod = b.addModule("learn_opengl", .{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
@@ -14,7 +14,7 @@ pub fn build(b: *std.Build) void {
     mod.addImport("engine", engine_dep.module("engine"));
 
     const exe = b.addExecutable(.{
-        .name = "game",
+        .name = "learn_opengl",
         .root_module = mod,
     });
 
