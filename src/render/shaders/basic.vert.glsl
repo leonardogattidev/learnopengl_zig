@@ -27,9 +27,27 @@ struct PointLight {
 #define NR_POINT_LIGHTS 4
 uniform PointLight u_point_lights[NR_POINT_LIGHTS];
 
+struct SpotLight {
+  vec3 position;
+  vec3 direction;
+  float cutoff;
+  float outer_cutoff;
+
+  vec3 ambient;
+  vec3 diffuse;
+  vec3 specular;
+
+  float constant;
+  float linear;
+  float quadratic;
+};
+
+uniform SpotLight u_spot_light;
+
 out VS_OUT {
   DirectionalLight directional_light;
   PointLight point_lights[NR_POINT_LIGHTS];
+  SpotLight spot_light;
 } vs_out;
 
 out vec3 vNormal;
@@ -54,4 +72,7 @@ void main() {
     vs_out.point_lights[i] = u_point_lights[i];
     vs_out.point_lights[i].position = vec3(view * vec4(vs_out.point_lights[i].position, 1.0));
   }
+  vs_out.spot_light = u_spot_light;
+  vs_out.spot_light.position = vec3(view * vec4(vs_out.spot_light.position, 1.0));
+  vs_out.spot_light.direction = normalize(mat3(view) * vs_out.spot_light.direction);
 }
