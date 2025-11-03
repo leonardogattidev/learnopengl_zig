@@ -195,17 +195,25 @@ fn renderCubes(ctx: *Context) !void {
     render.context.program.bind(renderable.material.program);
 
     const gpa = ctx.appstate.allocator;
-    try render.context.program.setFloat(gpa, "light.cutoff", @cos(math.radians(12.5)));
-    try render.context.program.setFloat(gpa, "light.outer_cutoff", @cos(math.radians(13.5)));
-    try render.context.program.setVec3(gpa, "light.ambient", .{ 0.2, 0.2, 0.2 });
-    try render.context.program.setVec3(gpa, "light.diffuse", .{ 0.5, 0.5, 0.5 });
-    try render.context.program.setVec3(gpa, "light.specular", .{ 1, 1, 1 });
-    try render.context.program.setFloat(gpa, "light.constant", 1);
-    try render.context.program.setFloat(gpa, "light.linear", 0.09);
-    try render.context.program.setFloat(gpa, "light.quadratic", 0.032);
+    // try render.context.program.setFloat(gpa, "light.cutoff", @cos(math.radians(12.5)));
+    // try render.context.program.setFloat(gpa, "light.outer_cutoff", @cos(math.radians(13.5)));
+    // try render.context.program.setVec3(gpa, "light.ambient", .{ 0.2, 0.2, 0.2 });
+    // try render.context.program.setVec3(gpa, "light.diffuse", .{ 0.5, 0.5, 0.5 });
+    // try render.context.program.setVec3(gpa, "light.specular", .{ 1, 1, 1 });
+    // try render.context.program.setFloat(gpa, "light.constant", 1);
+    // try render.context.program.setFloat(gpa, "light.linear", 0.09);
+    // try render.context.program.setFloat(gpa, "light.quadratic", 0.032);
+
+    // material
     try render.context.program.setInt(gpa, "material.diffuse", 0);
     try render.context.program.setInt(gpa, "material.specular", 1);
     try render.context.program.setFloat(gpa, "material.shininess", 32);
+
+    // directional light
+    try render.context.program.setVec3(gpa, "u_directional_light.direction", .{ -0.2, -1.0, -0.3 });
+    try render.context.program.setVec3(gpa, "u_directional_light.ambient", .{ 0.05, 0.05, 0.05 });
+    try render.context.program.setVec3(gpa, "u_directional_light.diffuse", .{ 0.4, 0.4, 0.4 });
+    try render.context.program.setVec3(gpa, "u_directional_light.specular", .{ 0.5, 0.5, 0.5 });
 
     try render.context.program.setMat4(gpa, "view", @ptrCast(&render.view));
     try render.context.program.setMat4(gpa, "projection", @ptrCast(&render.projection));

@@ -3,30 +3,42 @@ layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec2 aTexCoords;
 
+struct DirectionalLight {
+  vec3 direction;
+
+  vec3 ambient;
+  vec3 diffuse;
+  vec3 specular;
+};
+uniform DirectionalLight u_directional_light;
+
+// struct PointLight {
+//   vec3 position;
+//
+//   float constant;
+//   float linear;
+//   float quadratic;
+//
+//   vec3 ambient;
+//   vec3 diffuse;
+//   vec3 specular;
+// };
+
+// #define NR_POINT_LIGHTS 4
+// uniform PointLight u_point_lights[NR_POINT_LIGHTS];
+
+out VS_OUT {
+  DirectionalLight directional_light;
+  // PointLight point_lights[NR_POINT_LIGHTS];
+} vs_out;
+
 out vec3 vNormal;
 out vec3 vFragPos;
-out vec3 vLightPos;
 out vec2 vTexCoords;
 
 uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
-
-struct Light {
-  vec3 position;
-  vec3 direction;
-  float cutoff;
-
-  vec3 ambient;
-  vec3 diffuse;
-  vec3 specular;
-
-  float constant;
-  float linear;
-  float quadratic;
-};
-
-uniform Light light;
 
 void main() {
   vec4 local = vec4(aPos, 1.0);
@@ -36,4 +48,9 @@ void main() {
   vNormal = mat3(transpose(inverse(view * model))) * aNormal;
   // vLightPos = vec3(view * vec4(light.position, 1.0));
   vTexCoords = aTexCoords;
+  vs_out.directional_light = u_directional_light;
+  vs_out.directional_light.direction = normalize(mat3(view) * vs_out.directional_light.direction);
+  // for (int i = 0; i < NR_POINT_LIGHTS; i++) {
+  //   vs_out.point_lights[i] = u_point_lights[i];
+  // }
 }
