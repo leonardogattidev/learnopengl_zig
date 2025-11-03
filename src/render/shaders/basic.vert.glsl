@@ -12,24 +12,24 @@ struct DirectionalLight {
 };
 uniform DirectionalLight u_directional_light;
 
-// struct PointLight {
-//   vec3 position;
-//
-//   float constant;
-//   float linear;
-//   float quadratic;
-//
-//   vec3 ambient;
-//   vec3 diffuse;
-//   vec3 specular;
-// };
+struct PointLight {
+  vec3 position;
 
-// #define NR_POINT_LIGHTS 4
-// uniform PointLight u_point_lights[NR_POINT_LIGHTS];
+  float constant;
+  float linear;
+  float quadratic;
+
+  vec3 ambient;
+  vec3 diffuse;
+  vec3 specular;
+};
+
+#define NR_POINT_LIGHTS 4
+uniform PointLight u_point_lights[NR_POINT_LIGHTS];
 
 out VS_OUT {
   DirectionalLight directional_light;
-  // PointLight point_lights[NR_POINT_LIGHTS];
+  PointLight point_lights[NR_POINT_LIGHTS];
 } vs_out;
 
 out vec3 vNormal;
@@ -50,7 +50,8 @@ void main() {
   vTexCoords = aTexCoords;
   vs_out.directional_light = u_directional_light;
   vs_out.directional_light.direction = normalize(mat3(view) * vs_out.directional_light.direction);
-  // for (int i = 0; i < NR_POINT_LIGHTS; i++) {
-  //   vs_out.point_lights[i] = u_point_lights[i];
-  // }
+  for (int i = 0; i < NR_POINT_LIGHTS; i++) {
+    vs_out.point_lights[i] = u_point_lights[i];
+    vs_out.point_lights[i].position = vec3(view * vec4(vs_out.point_lights[i].position, 1.0));
+  }
 }

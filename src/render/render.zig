@@ -180,14 +180,32 @@ pub fn update(ctx: *Context) !void {
     processCameraInput(ctx);
     render.view = render.camera.viewMat4();
 
-    const light_position: Vec3 = .vec3(1.2, 1, 2);
-
     try renderCubes(ctx);
 
-    try renderLightSourceCube(ctx, light_position);
+    try renderLightSourceCubes(ctx);
 
     _ = sdl.SDL_GL_SwapWindow(appstate.window);
 }
+
+const cubes_positions: []const Vec3 = &.{
+    .vec3(0.0, 0.0, 0.0),
+    .vec3(2.0, 5.0, -15.0),
+    .vec3(-1.5, -2.2, -2.5),
+    .vec3(-3.8, -2.0, -12.3),
+    .vec3(2.4, -0.4, -3.5),
+    .vec3(-1.7, 3.0, -7.5),
+    .vec3(1.3, -2.0, -2.5),
+    .vec3(1.5, 2.0, -2.5),
+    .vec3(1.5, 0.2, -1.5),
+    .vec3(-1.3, 1.0, -1.5),
+};
+
+const point_light_positions: []const Vec3 = &.{
+    .vec3(0.7, 0.2, 2.0),
+    .vec3(2.3, -3.3, -4.0),
+    .vec3(-4.0, 2.0, -12.0),
+    .vec3(0.0, 0.0, -3.0),
+};
 
 fn renderCubes(ctx: *Context) !void {
     const render = &ctx.appstate.render;
@@ -210,26 +228,27 @@ fn renderCubes(ctx: *Context) !void {
     try render.context.program.setFloat(gpa, "material.shininess", 32);
 
     // directional light
-    try render.context.program.setVec3(gpa, "u_directional_light.direction", .{ -0.2, -1.0, -0.3 });
-    try render.context.program.setVec3(gpa, "u_directional_light.ambient", .{ 0.05, 0.05, 0.05 });
-    try render.context.program.setVec3(gpa, "u_directional_light.diffuse", .{ 0.4, 0.4, 0.4 });
-    try render.context.program.setVec3(gpa, "u_directional_light.specular", .{ 0.5, 0.5, 0.5 });
+    const u_dir_light_prefix = "u_directional_light.";
+    try render.context.program.setVec3(gpa, u_dir_light_prefix ++ "direction", .{ -0.2, -1.0, -0.3 });
+    try render.context.program.setVec3(gpa, u_dir_light_prefix ++ "ambient", .{ 0.05, 0.05, 0.05 });
+    try render.context.program.setVec3(gpa, u_dir_light_prefix ++ "diffuse", .{ 0.4, 0.4, 0.4 });
+    try render.context.program.setVec3(gpa, u_dir_light_prefix ++ "specular", .{ 0.5, 0.5, 0.5 });
+
+    // point lights
+    inline for (0..point_light_positions.len, point_light_positions) |idx, pos| {
+        const prefix = std.fmt.comptimePrint("u_point_lights[{}].", .{idx});
+        try render.context.program.setVec3(gpa, prefix ++ "position", pos.data);
+        try render.context.program.setVec3(gpa, prefix ++ "ambient", .{ 0.05, 0.05, 0.05 });
+        try render.context.program.setVec3(gpa, prefix ++ "diffuse", .{ 0.8, 0.8, 0.8 });
+        try render.context.program.setVec3(gpa, prefix ++ "specular", .{ 1.0, 1.0, 1.0 });
+        try render.context.program.setFloat(gpa, prefix ++ "constant", 1.0);
+        try render.context.program.setFloat(gpa, prefix ++ "linear", 0.09);
+        try render.context.program.setFloat(gpa, prefix ++ "quadratic", 0.032);
+    }
 
     try render.context.program.setMat4(gpa, "view", @ptrCast(&render.view));
     try render.context.program.setMat4(gpa, "projection", @ptrCast(&render.projection));
 
-    const cubes_positions: []const Vec3 = &.{
-        .vec3(0.0, 0.0, 0.0),
-        .vec3(2.0, 5.0, -15.0),
-        .vec3(-1.5, -2.2, -2.5),
-        .vec3(-3.8, -2.0, -12.3),
-        .vec3(2.4, -0.4, -3.5),
-        .vec3(-1.7, 3.0, -7.5),
-        .vec3(1.3, -2.0, -2.5),
-        .vec3(1.5, 2.0, -2.5),
-        .vec3(1.5, 0.2, -1.5),
-        .vec3(-1.3, 1.0, -1.5),
-    };
     for (0..cubes_positions.len, cubes_positions) |idx, pos| {
         var model: Mat4 = .identity;
         model.translate(pos);
@@ -244,21 +263,24 @@ fn renderCubes(ctx: *Context) !void {
     }
 }
 
-fn renderLightSourceCube(ctx: *Context, light_position: Vec3) !void {
+fn renderLightSourceCubes(ctx: *Context) !void {
     const gpa = ctx.appstate.allocator;
     const render = &ctx.appstate.render;
     const context = &render.context;
     const renderable = render.renderables.items[1];
     context.program.bind(renderable.material.program);
 
-    var model: Mat4 = .identity;
-    model.translate(light_position);
-    model.scale(.vec3(0.2, 0.2, 0.2));
-    try context.program.setMat4(gpa, "model", @ptrCast(&model));
     try context.program.setMat4(gpa, "view", @ptrCast(&render.view));
     try context.program.setMat4(gpa, "projection", @ptrCast(&render.projection));
 
-    try renderable.draw(gpa, context);
+    for (point_light_positions) |pos| {
+        var model: Mat4 = .identity;
+        model.translate(pos);
+        model.scale(.vec3(0.2, 0.2, 0.2));
+        try context.program.setMat4(gpa, "model", @ptrCast(&model));
+
+        try renderable.draw(gpa, context);
+    }
 }
 
 fn processCameraInput(ctx: *Context) void {
