@@ -5,10 +5,13 @@ const engine = @import("engine");
 const gl = engine.gl;
 const types = engine.renderer.types.gl;
 const VertexArray = types.VertexArray;
-const Texture = types.Texture;
+// const Texture = types.Texture;
 const ContextManager = types.ContextManager;
 const ResourceManager = types.ResourceManager;
-const ShaderProgramKey = ResourceManager.ShaderProgramManager.Key;
+const ShaderProgramKey = ResourceManager.ShaderProgramManager.ShaderProgramHandle;
+const VertexArrayHandle = types.ContextManager.VertexArrayManager.VertexArrayHandle;
+const TextureUnitHandle = ContextManager.TextureManager.TextureUnitHandle;
+const TextureHandle = ResourceManager.TextureManager.TextureHandle;
 
 const ViewInput = struct {
     yaw: f32,
@@ -27,10 +30,10 @@ pub fn draw(self: Renderable, gpa: Allocator, context: *ContextManager) !void {
 }
 
 pub const Mesh = struct {
-    vao: VertexArray,
+    vao: VertexArrayHandle,
 
     pub fn bind(self: Mesh, context: *ContextManager) void {
-        context.vao.bind(self.vao);
+        context.vaos.bind(self.vao);
     }
 };
 
@@ -39,12 +42,12 @@ pub const Material = struct {
     textures: ?[]TextureBindings = null,
 
     pub const TextureBindings = struct {
-        texture_unit: u16,
+        texture_unit: TextureUnitHandle,
         textures: []Binding,
 
         pub const Binding = struct {
-            target: ContextManager.TextureManager.TextureUnit.Target,
-            texture: Texture,
+            target: ContextManager.TextureManager.Target,
+            texture: TextureHandle,
         };
     };
 

@@ -83,11 +83,7 @@ pub fn load(gpa: Allocator, file_path: [:0]const u8) !Result {
         gpa.free(path);
 
         std.log.info("loading texture from: {s}", .{texture_path});
-        const tex_file = try std.fs.cwd().openFile(texture_path, .{});
-        defer tex_file.close();
-        const file_data = try getMmappedFile(tex_file);
-        defer std.posix.munmap(@ptrCast(@alignCast(file_data)));
-        out_texture.* = try assets.decodeImage(gpa, file_data);
+        out_texture.* = try loadTextureFromFile(gpa, texture_path);
     }
 
     return .{
@@ -96,6 +92,14 @@ pub fn load(gpa: Allocator, file_path: [:0]const u8) !Result {
         .renderables = out_renderables,
         .textures = out_textures,
     };
+}
+
+pub fn loadTextureFromFile(gpa: Allocator, path: []const u8) !Texture2D {
+    const tex_file = try std.fs.cwd().openFile(path, .{});
+    defer tex_file.close();
+    const file_data = try getMmappedFile(tex_file);
+    defer std.posix.munmap(@ptrCast(@alignCast(file_data)));
+    return try assets.decodeImage(gpa, file_data);
 }
 
 fn processTexture(gpa: Allocator, tex_sources: *std.StringArrayHashMapUnmanaged(void), mat: *assimp.aiMaterial, kind: assimp.enum_aiTextureType) !?usize {

@@ -9,11 +9,14 @@ pub fn getRenderable(ctx: *Context) !Renderable {
     const render = &ctx.appstate.render;
     const gpa = ctx.appstate.allocator;
 
-    const light_source_program_key = try render.resources.programs.newVF(
-        gpa,
-        @ptrCast(@embedFile("shaders/light_source.vert.glsl")),
-        @ptrCast(@embedFile("shaders/light_source.frag.glsl")),
-    );
+    const light_source_program_key = try render.resources.programs.new(gpa, .init(.{
+        .vertex = &.{
+            @ptrCast(@embedFile("shaders/light_source.vert.glsl")),
+        },
+        .fragment = &.{
+            @ptrCast(@embedFile("shaders/light_source.frag.glsl")),
+        },
+    }));
 
     var mesh_data: MeshData = mesh_data: {
         var mesh_data = MeshData{ .indices = &indices, .vertices = .empty };
@@ -25,7 +28,7 @@ pub fn getRenderable(ctx: *Context) !Renderable {
         break :mesh_data mesh_data;
     };
 
-    const vaos = try render_mod.setupMeshes(gpa, @ptrCast(&mesh_data));
+    const vaos = try render_mod.setupMeshes(gpa, &render.context, &render.resources, @ptrCast(&mesh_data));
     std.debug.assert(1 == vaos.len);
     const light_source_vao = vaos[0];
 
@@ -34,11 +37,11 @@ pub fn getRenderable(ctx: *Context) !Renderable {
             .program = light_source_program_key,
         },
         .mesh = .{
-            .vao = .{ .handle = .{ .value = light_source_vao } },
+            .vao = light_source_vao,
         },
         .draw_params = .{
             .draw_elements = .{
-                .count = 36,
+                .count = mesh_data.indices.len,
                 .mode = .triangles,
                 .type = .unsigned_int,
                 .offset = 0,

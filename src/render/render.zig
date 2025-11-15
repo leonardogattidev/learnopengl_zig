@@ -18,47 +18,56 @@ const MeshData = @import("MeshData.zig");
 const TextureBindings = Renderable.Material.TextureBindings;
 const Binding = TextureBindings.Binding;
 const cube = @import("cube.zig");
+const VertexArrayHandle = types.ContextManager.VertexArrayManager.VertexArrayHandle;
 
-pub fn setupMeshes(gpa: Allocator, meshes: []MeshData) ![]const c_uint {
-    const vaos = try gpa.alloc(c_uint, meshes.len);
-    gl.GenVertexArrays(@intCast(vaos.len), vaos.ptr);
+pub fn setupMeshes(gpa: Allocator, context: *types.ContextManager, resources: *types.ResourceManager, meshes: []MeshData) ![]const VertexArrayHandle {
+    const vaos = try context.vaos.addMany(gpa, meshes.len);
     for (meshes, vaos) |mesh, vao| {
-        gl.BindVertexArray(vao);
+        context.vaos.bind(vao);
 
         const buffer_count = 4;
-        const buffer_objects = try gpa.alloc(c_uint, buffer_count);
-        gl.GenBuffers(buffer_count, buffer_objects.ptr);
+        const buffers = try resources.buffers.addMany(gpa, buffer_count);
 
-        const ebo = buffer_objects[0];
-        gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
-        const indices: []const u8 = std.mem.sliceAsBytes(mesh.indices);
-        gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(indices.len), indices.ptr, gl.STATIC_DRAW);
+        const ebo = buffers[0];
+        context.buffers.bind(.element_array, ebo);
+        context.buffers.setData(.element_array, std.mem.sliceAsBytes(mesh.indices), .static_draw);
 
-        const vbo_positions = buffer_objects[1];
-        gl.BindBuffer(gl.ARRAY_BUFFER, vbo_positions);
-        const vertices_positions: []const u8 = std.mem.sliceAsBytes(mesh.vertices.items(.position));
-        gl.BufferData(gl.ARRAY_BUFFER, @intCast(vertices_positions.len), vertices_positions.ptr, gl.STATIC_DRAW);
-        gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 0, 0);
         gl.EnableVertexAttribArray(0);
 
-        const vbo_normals = buffer_objects[2];
-        gl.BindBuffer(gl.ARRAY_BUFFER, vbo_normals);
-        const vertices_normals: []const u8 = std.mem.sliceAsBytes(mesh.vertices.items(.normal));
-        gl.BufferData(gl.ARRAY_BUFFER, @intCast(vertices_normals.len), vertices_normals.ptr, gl.STATIC_DRAW);
-        gl.VertexAttribPointer(1, 3, gl.FLOAT, gl.FALSE, 0, 0);
-        gl.EnableVertexAttribArray(1);
+        const vbo_positions = buffers[1];
+        context.buffers.bind(.array, vbo_positions);
+        context.buffers.setData(
+            .array,
+            std.mem.sliceAsBytes(mesh.vertices.items(.position)),
+            .static_draw,
+        );
+        context.vaos.attributePointer(.{ .index = 0, .size = 3 });
+        context.vaos.enableVertexAttribArray(0);
 
-        const vbo_uvs = buffer_objects[3];
-        gl.BindBuffer(gl.ARRAY_BUFFER, vbo_uvs);
-        const vertices_uvs: []const u8 = std.mem.sliceAsBytes(mesh.vertices.items(.uv));
-        gl.BufferData(gl.ARRAY_BUFFER, @intCast(vertices_uvs.len), vertices_uvs.ptr, gl.STATIC_DRAW);
-        gl.VertexAttribPointer(2, 2, gl.FLOAT, gl.FALSE, 0, 0);
-        gl.EnableVertexAttribArray(2);
+        const vbo_normals = buffers[2];
+        context.buffers.bind(.array, vbo_normals);
+        context.buffers.setData(
+            .array,
+            std.mem.sliceAsBytes(mesh.vertices.items(.normal)),
+            .static_draw,
+        );
+        context.vaos.attributePointer(.{ .index = 1, .size = 3 });
+        context.vaos.enableVertexAttribArray(1);
+
+        const vbo_uvs = buffers[3];
+        context.buffers.bind(.array, vbo_uvs);
+        context.buffers.setData(
+            .array,
+            std.mem.sliceAsBytes(mesh.vertices.items(.uv)),
+            .static_draw,
+        );
+        context.vaos.attributePointer(.{ .index = 2, .size = 2 });
+        context.vaos.enableVertexAttribArray(2);
     }
     return vaos;
 }
 
-fn setup2DTextures(gpa: Allocator, texture_buffers: []const assets.Texture2D) ![]c_uint {
+fn setup2DTextures(gpa: Allocator, texture_buffers: []const assets.Texture2D) ![]types.ResourceManager.TextureManager.TextureHandle {
     const texture_ids = try gpa.alloc(c_uint, texture_buffers.len);
     gl.GenTextures(@intCast(texture_buffers.len), texture_ids.ptr);
     gl.ActiveTexture(gl.TEXTURE0);
@@ -83,7 +92,7 @@ fn setup2DTextures(gpa: Allocator, texture_buffers: []const assets.Texture2D) ![
         );
         gl.GenerateMipmap(gl.TEXTURE_2D);
     }
-    return texture_ids;
+    return @ptrCast(texture_ids);
 }
 
 pub fn setup(ctx: *Context) !void {
@@ -95,19 +104,16 @@ pub fn setup(ctx: *Context) !void {
     if (!sdl.SDL_SetWindowRelativeMouseMode(ctx.appstate.window, true)) return error.could_not_set_relative_mouse_mode;
 
     try resources.programs.store.ensureTotalCapacity(gpa, 3);
-    const phong_shader = try resources.programs.newVF(
-        gpa,
-        @ptrCast(@embedFile("shaders/basic.vert.glsl")),
-        @ptrCast(@embedFile("shaders/basic.frag.glsl")),
-        // @ptrCast(@embedFile("shaders/shadeless.vert.glsl")),
-        // @ptrCast(@embedFile("shaders/shadeless.frag.glsl")),
-    );
+    const phong_shader = try resources.programs.new(gpa, .init(.{
+        .vertex = &.{@ptrCast(@embedFile("shaders/basic.vert.glsl"))},
+        .fragment = &.{@ptrCast(@embedFile("shaders/basic.frag.glsl"))},
+    }));
 
     const result = try model_loader.load(gpa, "./src/assets/backpack/backpack.obj");
     defer result.deinit(gpa);
 
     const renderables = try render.renderables.addManyAsSlice(gpa, result.renderables.len);
-    const vaos = try setupMeshes(gpa, result.meshes);
+    const vaos = try setupMeshes(gpa, &render.context, &render.resources, result.meshes);
     const textures = try setup2DTextures(gpa, result.textures);
     std.debug.assert(textures.len == 2);
     for (renderables, result.meshes, vaos, result.renderables) |*renderable, mesh, vao, render_item| {
@@ -115,8 +121,8 @@ pub fn setup(ctx: *Context) !void {
 
         std.debug.assert(render_item.material == 1);
 
-        const diffuse_map = if (material.diffuse_map) |idx| types.Texture.from(textures[idx]) else null;
-        const specular_map = if (material.specular_map) |idx| types.Texture.from(textures[idx]) else null;
+        const diffuse_map = if (material.diffuse_map) |idx| textures[idx] else null;
+        const specular_map = if (material.specular_map) |idx| textures[idx] else null;
         var texture_count: usize = 0;
         if (null != diffuse_map) texture_count += 1;
         if (null != specular_map) texture_count += 1;
@@ -125,13 +131,13 @@ pub fn setup(ctx: *Context) !void {
             const tex_bindings = try gpa.alloc(TextureBindings, texture_count);
             const bindings = try gpa.alloc(Binding, texture_count);
 
-            if (diffuse_map) |_diffuse_map| {
+            if (diffuse_map) |diff_map| {
                 bindings[0] = .{
                     .target = .tex_2d,
-                    .texture = _diffuse_map,
+                    .texture = diff_map,
                 };
                 tex_bindings[0] = .{
-                    .texture_unit = 0,
+                    .texture_unit = @enumFromInt(0),
                     .textures = bindings[0..1],
                 };
             }
@@ -143,7 +149,7 @@ pub fn setup(ctx: *Context) !void {
                     .texture = _specular_map,
                 };
                 tex_bindings[idx] = .{
-                    .texture_unit = 1,
+                    .texture_unit = @enumFromInt(1),
                     .textures = bindings[idx .. idx + 1],
                 };
             }
@@ -156,7 +162,7 @@ pub fn setup(ctx: *Context) !void {
                 .textures = tex_bindings,
             },
             .mesh = .{
-                .vao = .{ .handle = .{ .value = vao } },
+                .vao = vao,
             },
             .draw_params = .{
                 .draw_elements = .{
@@ -195,6 +201,12 @@ pub fn setup(ctx: *Context) !void {
     gl.Enable(gl.DEPTH_TEST);
     // gl.Enable(gl.MULTISAMPLE);
 
+    // var fbo: c_uint = undefined;
+    // gl.GenFramebuffers(1, &fbo);
+    // gl.BindFramebuffer(gl.FRAMEBUFFER, fbo);
+    //
+    // var rbo: c_uint = undefined;
+    // gl.GenRenderbuffers(1, &rbo);
 }
 
 const point_light_positions: []const Vec3 = &.{
