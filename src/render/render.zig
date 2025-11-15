@@ -13,148 +13,165 @@ const types = engine.renderer.types.gl;
 const ShaderProgram = types.ShaderProgram;
 const vertex_data = @import("cube_data.zig");
 const Renderable = @import("Renderable.zig");
+const model_loader = @import("model_loader.zig");
+const MeshData = @import("MeshData.zig");
+const TextureBindings = Renderable.Material.TextureBindings;
+const Binding = TextureBindings.Binding;
+const cube = @import("cube.zig");
+
+pub fn setupMeshes(gpa: Allocator, meshes: []MeshData) ![]const c_uint {
+    const vaos = try gpa.alloc(c_uint, meshes.len);
+    gl.GenVertexArrays(@intCast(vaos.len), vaos.ptr);
+    for (meshes, vaos) |mesh, vao| {
+        gl.BindVertexArray(vao);
+
+        const buffer_count = 4;
+        const buffer_objects = try gpa.alloc(c_uint, buffer_count);
+        gl.GenBuffers(buffer_count, buffer_objects.ptr);
+
+        const ebo = buffer_objects[0];
+        gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
+        const indices: []const u8 = std.mem.sliceAsBytes(mesh.indices);
+        gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(indices.len), indices.ptr, gl.STATIC_DRAW);
+
+        const vbo_positions = buffer_objects[1];
+        gl.BindBuffer(gl.ARRAY_BUFFER, vbo_positions);
+        const vertices_positions: []const u8 = std.mem.sliceAsBytes(mesh.vertices.items(.position));
+        gl.BufferData(gl.ARRAY_BUFFER, @intCast(vertices_positions.len), vertices_positions.ptr, gl.STATIC_DRAW);
+        gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 0, 0);
+        gl.EnableVertexAttribArray(0);
+
+        const vbo_normals = buffer_objects[2];
+        gl.BindBuffer(gl.ARRAY_BUFFER, vbo_normals);
+        const vertices_normals: []const u8 = std.mem.sliceAsBytes(mesh.vertices.items(.normal));
+        gl.BufferData(gl.ARRAY_BUFFER, @intCast(vertices_normals.len), vertices_normals.ptr, gl.STATIC_DRAW);
+        gl.VertexAttribPointer(1, 3, gl.FLOAT, gl.FALSE, 0, 0);
+        gl.EnableVertexAttribArray(1);
+
+        const vbo_uvs = buffer_objects[3];
+        gl.BindBuffer(gl.ARRAY_BUFFER, vbo_uvs);
+        const vertices_uvs: []const u8 = std.mem.sliceAsBytes(mesh.vertices.items(.uv));
+        gl.BufferData(gl.ARRAY_BUFFER, @intCast(vertices_uvs.len), vertices_uvs.ptr, gl.STATIC_DRAW);
+        gl.VertexAttribPointer(2, 2, gl.FLOAT, gl.FALSE, 0, 0);
+        gl.EnableVertexAttribArray(2);
+    }
+    return vaos;
+}
+
+fn setup2DTextures(gpa: Allocator, texture_buffers: []const assets.Texture2D) ![]c_uint {
+    const texture_ids = try gpa.alloc(c_uint, texture_buffers.len);
+    gl.GenTextures(@intCast(texture_buffers.len), texture_ids.ptr);
+    gl.ActiveTexture(gl.TEXTURE0);
+
+    for (texture_ids, texture_buffers) |tex_id, texture_buffer| {
+        gl.BindTexture(gl.TEXTURE_2D, tex_id);
+
+        const element_n = @divFloor(@as(c_int, @intCast(texture_buffer.data.len)), texture_buffer.channel);
+        const height: c_int = @divFloor(element_n, texture_buffer.width);
+        std.log.info("w = {}, h = {}", .{ texture_buffer.width, height });
+        std.debug.assert(height == texture_buffer.width);
+        gl.TexImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.RGBA,
+            texture_buffer.width,
+            height,
+            0,
+            gl.RGBA,
+            gl.UNSIGNED_BYTE,
+            texture_buffer.data.ptr,
+        );
+        gl.GenerateMipmap(gl.TEXTURE_2D);
+    }
+    return texture_ids;
+}
 
 pub fn setup(ctx: *Context) !void {
     const appstate = &ctx.appstate;
     const render = &appstate.render;
-    const context = &appstate.render.context;
+    // const context = &appstate.render.context;
     const resources = &appstate.render.resources;
     const gpa = appstate.allocator;
-
     if (!sdl.SDL_SetWindowRelativeMouseMode(ctx.appstate.window, true)) return error.could_not_set_relative_mouse_mode;
 
     try resources.programs.store.ensureTotalCapacity(gpa, 3);
-    const basic_program_key = try resources.programs.newVF(
+    const phong_shader = try resources.programs.newVF(
         gpa,
         @ptrCast(@embedFile("shaders/basic.vert.glsl")),
         @ptrCast(@embedFile("shaders/basic.frag.glsl")),
-    );
-    const light_source_program_key = try resources.programs.newVF(
-        gpa,
-        @ptrCast(@embedFile("shaders/light_source.vert.glsl")),
-        @ptrCast(@embedFile("shaders/light_source.frag.glsl")),
+        // @ptrCast(@embedFile("shaders/shadeless.vert.glsl")),
+        // @ptrCast(@embedFile("shaders/shadeless.frag.glsl")),
     );
 
-    // CUBE BUFFERS
-    const vbo = context.buffers.create();
-    // TODO: deinit
-    context.buffers.bind(.array, vbo);
-    context.buffers.setData(.array, vertex_data.vertices, .static_draw);
-    //
+    const result = try model_loader.load(gpa, "./src/assets/backpack/backpack.obj");
+    defer result.deinit(gpa);
 
-    const vbo_stride = 8 * @sizeOf(f32);
-    // LIGHTING VAO
-    const basic_vao = context.vao.create();
-    context.vao.bind(basic_vao);
-    context.vao.attributePointer(.{
-        .index = 0,
-        .size = 3,
-        .pointer = 0,
-        .stride = vbo_stride,
-    });
-    context.vao.enableVertexAttribArray(0);
-    context.vao.attributePointer(.{
-        .index = 1,
-        .size = 3,
-        .pointer = @sizeOf(f32) * 3,
-        .stride = vbo_stride,
-    });
-    context.vao.enableVertexAttribArray(1);
-    context.vao.attributePointer(.{
-        .index = 2,
-        .size = 2,
-        .pointer = @sizeOf(f32) * 6,
-        .stride = vbo_stride,
-    });
-    context.vao.enableVertexAttribArray(2);
-    //
+    const renderables = try render.renderables.addManyAsSlice(gpa, result.renderables.len);
+    const vaos = try setupMeshes(gpa, result.meshes);
+    const textures = try setup2DTextures(gpa, result.textures);
+    std.debug.assert(textures.len == 2);
+    for (renderables, result.meshes, vaos, result.renderables) |*renderable, mesh, vao, render_item| {
+        const material = result.materials[render_item.material];
 
-    const light_source_vao = context.vao.create();
-    context.vao.bind(light_source_vao);
-    context.vao.attributePointer(.{
-        .index = 0,
-        .size = 3,
-        .pointer = 0,
-        .stride = vbo_stride,
-    });
-    context.vao.enableVertexAttribArray(0);
+        std.debug.assert(render_item.material == 1);
 
-    context.vao.unbind();
-    context.buffers.unbind(.element_array);
+        const diffuse_map = if (material.diffuse_map) |idx| types.Texture.from(textures[idx]) else null;
+        const specular_map = if (material.specular_map) |idx| types.Texture.from(textures[idx]) else null;
+        var texture_count: usize = 0;
+        if (null != diffuse_map) texture_count += 1;
+        if (null != specular_map) texture_count += 1;
 
-    const diffuse_map_img = try assets.decodeImage(@embedFile("../assets/container2.png"));
-    try context.textures.setActive(gpa, 0);
-    const tex1 = resources.textures.create();
-    context.textures.bind(.tex_2d, tex1);
-    context.textures.setImage2D(.tex_2d, diffuse_map_img);
-    context.textures.generateMipmap(.tex_2d);
+        const tex_bindings = if (texture_count < 1) null else tex_bindings: {
+            const tex_bindings = try gpa.alloc(TextureBindings, texture_count);
+            const bindings = try gpa.alloc(Binding, texture_count);
 
-    const specular_map_img = try assets.decodeImage(@embedFile("../assets/container2_specular.png"));
-    const tex2 = resources.textures.create();
-    context.textures.bind(.tex_2d, tex2);
-    context.textures.setImage2D(.tex_2d, specular_map_img);
-    context.textures.generateMipmap(.tex_2d);
-    context.textures.bind(.tex_2d, .zero);
+            if (diffuse_map) |_diffuse_map| {
+                bindings[0] = .{
+                    .target = .tex_2d,
+                    .texture = _diffuse_map,
+                };
+                tex_bindings[0] = .{
+                    .texture_unit = 0,
+                    .textures = bindings[0..1],
+                };
+            }
 
-    const basic_renderable_textures = texbinds: {
-        const TextureBindings = Renderable.Material.TextureBindings;
-        const texture_bindings = try gpa.alloc(TextureBindings, 2);
-        const bindings1 = try gpa.alloc(TextureBindings.Binding, 1);
-        const bindings2 = try gpa.alloc(TextureBindings.Binding, 1);
-        texture_bindings[0] = TextureBindings{
-            .texture_unit = 0,
-            .textures = bindings1,
+            if (specular_map) |_specular_map| {
+                const idx: usize = if (null != diffuse_map) 1 else 0;
+                bindings[idx] = .{
+                    .target = .tex_2d,
+                    .texture = _specular_map,
+                };
+                tex_bindings[idx] = .{
+                    .texture_unit = 1,
+                    .textures = bindings[idx .. idx + 1],
+                };
+            }
+            break :tex_bindings tex_bindings;
         };
-        bindings1[0] = TextureBindings.Binding{
-            .target = .tex_2d,
-            .texture = tex1,
-        };
-        texture_bindings[1] = TextureBindings{
-            .texture_unit = 1,
-            .textures = bindings2,
-        };
-        bindings2[0] = TextureBindings.Binding{
-            .target = .tex_2d,
-            .texture = tex2,
-        };
-        break :texbinds texture_bindings;
-    };
 
-    const basic_renderable = Renderable{
-        .material = .{
-            .program = basic_program_key,
-            .textures = basic_renderable_textures,
-        },
-        .mesh = .{
-            .vao = basic_vao,
-        },
-        .draw_params = .{
-            .draw_arrays = .{
-                .count = 36,
-                .mode = .triangles,
-                .offset = 0,
+        renderable.* = .{
+            .material = .{
+                .program = phong_shader,
+                .textures = tex_bindings,
             },
-        },
-    };
-    const light_source_renderable = Renderable{
-        .material = .{
-            .program = light_source_program_key,
-        },
-        .mesh = .{
-            .vao = light_source_vao,
-        },
-        .draw_params = .{
-            .draw_arrays = .{
-                .count = 36,
-                .mode = .triangles,
-                .offset = 0,
+            .mesh = .{
+                .vao = .{ .handle = .{ .value = vao } },
             },
-        },
-    };
+            .draw_params = .{
+                .draw_elements = .{
+                    .count = mesh.indices.len,
+                    .mode = .triangles,
+                    .type = .unsigned_int,
+                    .offset = 0,
+                },
+            },
+        };
+    }
 
-    try render.renderables.appendSlice(gpa, &.{ basic_renderable, light_source_renderable });
+    const cube_renderable = try render.renderables.addOne(gpa);
 
-    gl.Enable(gl.DEPTH_TEST);
+    cube_renderable.* = try cube.getRenderable(ctx);
 
     render.projection = math.Mat4.perspective(45, 640 / 480, 0.1, 100);
 
@@ -167,38 +184,18 @@ pub fn setup(ctx: *Context) !void {
     render.view_input.yaw = -90;
     render.view_input.pitch = 0;
 
+    render.frame_calc.reset(ctx.elapsed);
+
     // gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE);
+
+    // gl.Enable(gl.CULL_FACE);
+    // gl.CullFace(gl.FRONT);
+    // gl.FrontFace(gl.CCW);
+
+    gl.Enable(gl.DEPTH_TEST);
+    // gl.Enable(gl.MULTISAMPLE);
+
 }
-
-pub fn update(ctx: *Context) !void {
-    const appstate = &ctx.appstate;
-    gl.ClearColor(6.0 / 255.0, 21.0 / 255.0, 88.0 / 255.0, 1);
-    gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-    const render = &appstate.render;
-
-    processCameraInput(ctx);
-    render.view = render.camera.viewMat4();
-
-    try renderCubes(ctx);
-
-    try renderLightSourceCubes(ctx);
-
-    _ = sdl.SDL_GL_SwapWindow(appstate.window);
-}
-
-const cubes_positions: []const Vec3 = &.{
-    .vec3(0.0, 0.0, 0.0),
-    .vec3(2.0, 5.0, -15.0),
-    .vec3(-1.5, -2.2, -2.5),
-    .vec3(-3.8, -2.0, -12.3),
-    .vec3(2.4, -0.4, -3.5),
-    .vec3(-1.7, 3.0, -7.5),
-    .vec3(1.3, -2.0, -2.5),
-    .vec3(1.5, 2.0, -2.5),
-    .vec3(1.5, 0.2, -1.5),
-    .vec3(-1.3, 1.0, -1.5),
-};
 
 const point_light_positions: []const Vec3 = &.{
     .vec3(0.7, 0.2, 2.0),
@@ -207,17 +204,55 @@ const point_light_positions: []const Vec3 = &.{
     .vec3(0.0, 0.0, -3.0),
 };
 
-fn renderCubes(ctx: *Context) !void {
-    const render = &ctx.appstate.render;
-    const renderable = render.renderables.items[0];
-    render.context.program.bind(renderable.material.program);
+pub fn update(ctx: *Context) !void {
+    const appstate = &ctx.appstate;
 
-    const gpa = ctx.appstate.allocator;
+    {
+        const frame_calc = &ctx.appstate.render.frame_calc;
+        frame_calc.update();
+        if (ctx.elapsed - frame_calc.prev_time > 0.05 * std.time.ns_per_s) {
+            const duration_s = frame_calc.durationTo(ctx.elapsed, f128);
+            const frames_since = frame_calc.framesSince(f128);
+            const fps = (1 / duration_s) * frames_since;
+            const ms = (duration_s / frames_since) * 1000;
+            frame_calc.reset(ctx.elapsed);
+            var buf = std.mem.zeroes([512:0]u8);
+            const title: [:0]u8 = @ptrCast(try std.fmt.bufPrint(&buf, "{d:0<7.2} FPS | {d:0<6.3} ms", .{ fps, ms }));
+            // std.log.info("title={s}", .{title});
+            _ = sdl.SDL_SetWindowTitle(ctx.appstate.window, @ptrCast(title));
+        }
+    }
 
-    // material
+    gl.ClearColor(6.0 / 255.0, 21.0 / 255.0, 88.0 / 255.0, 1);
+    gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    const render = &appstate.render;
+
+    processCameraInput(ctx);
+    render.view = render.camera.viewMat4();
+
+    // render all meshes
+
+    const renderables = render.renderables.items;
+    try setupLights(ctx);
+    try renderBasic(ctx, renderables[0 .. renderables.len - 1]);
+    // try renderLightSources(ctx, renderables[renderables.len - 1]);
+
+    _ = sdl.SDL_GL_SwapWindow(appstate.window);
+}
+
+fn setupLights(ctx: *Context) !void {
+    const appstate = &ctx.appstate;
+    const gpa = appstate.allocator;
+    const render = &appstate.render;
+    const renderables = render.renderables.items;
+    try renderables[0].material.bind(gpa, &render.context);
+    try render.context.program.setMat4(gpa, "view", @ptrCast(&render.view));
+    try render.context.program.setMat4(gpa, "projection", @ptrCast(&render.projection));
+
     try render.context.program.setInt(gpa, "material.diffuse", 0);
     try render.context.program.setInt(gpa, "material.specular", 1);
-    try render.context.program.setFloat(gpa, "material.shininess", 32);
+    try render.context.program.setFloat(gpa, "material.shininess", 100.0);
 
     // directional light
     const u_dir_light_prefix = "u_directional_light.";
@@ -250,41 +285,43 @@ fn renderCubes(ctx: *Context) !void {
     try render.context.program.setFloat(gpa, u_spot_light ++ "quadratic", 0.032);
     try render.context.program.setFloat(gpa, u_spot_light ++ "cutoff", @cos(math.radians(12.5)));
     try render.context.program.setFloat(gpa, u_spot_light ++ "outer_cutoff", @cos(math.radians(13.5)));
+}
+
+fn renderBasic(ctx: *Context, renderables: []const Renderable) !void {
+    const appstate = &ctx.appstate;
+    const gpa = appstate.allocator;
+    const render = &appstate.render;
+
+    try renderables[0].material.bind(gpa, &render.context);
+
+    var model: Mat4 = .identity;
+    // model.scale(.vec3(10, 10, 10));
+    try render.context.program.setMat4(gpa, "model", @ptrCast(&model));
+
+    for (renderables) |renderable| {
+        // _ = renderable;
+        try renderable.draw(gpa, &render.context);
+        // std.debug.assert(0 == render.context.program.getBound().getUniformInteger("material.diffuse"));
+        // std.debug.assert(1 == render.context.program.getBound().getUniformInteger("material.specular"));
+    }
+}
+
+fn renderLightSources(ctx: *Context, renderable: Renderable) !void {
+    const appstate = &ctx.appstate;
+    const render = &appstate.render;
+    const gpa = appstate.allocator;
+
+    try renderable.material.bind(gpa, &render.context);
 
     try render.context.program.setMat4(gpa, "view", @ptrCast(&render.view));
     try render.context.program.setMat4(gpa, "projection", @ptrCast(&render.projection));
 
-    for (0..cubes_positions.len, cubes_positions) |idx, pos| {
-        var model: Mat4 = .identity;
-        model.translate(pos);
-        const elapsedSecs = ctx.elapsedS(f32);
-        const i: f32 = @floatFromInt(idx);
-        const rotate = @mod(elapsedSecs * (i + 1), 360);
-        // std.log.info("rotate = {}", .{rotate});
-        model.rotate(math.radians(rotate * 20), .vec3(0, 1, 0));
-        try render.context.program.setMat4(gpa, "model", @ptrCast(&model));
-
-        try renderable.draw(gpa, &render.context);
-    }
-}
-
-fn renderLightSourceCubes(ctx: *Context) !void {
-    const gpa = ctx.appstate.allocator;
-    const render = &ctx.appstate.render;
-    const context = &render.context;
-    const renderable = render.renderables.items[1];
-    context.program.bind(renderable.material.program);
-
-    try context.program.setMat4(gpa, "view", @ptrCast(&render.view));
-    try context.program.setMat4(gpa, "projection", @ptrCast(&render.projection));
-
     for (point_light_positions) |pos| {
         var model: Mat4 = .identity;
         model.translate(pos);
-        model.scale(.vec3(0.2, 0.2, 0.2));
-        try context.program.setMat4(gpa, "model", @ptrCast(&model));
+        try render.context.program.setMat4(gpa, "model", @ptrCast(&model.data));
 
-        try renderable.draw(gpa, context);
+        try renderable.draw(gpa, &render.context);
     }
 }
 
@@ -292,7 +329,7 @@ fn processCameraInput(ctx: *Context) void {
     const camera = &ctx.appstate.render.camera;
 
     // camera position
-    var camera_speed: f32 = 5 * @as(f32, @floatCast(ctx.delta_time));
+    var camera_speed: f32 = 5 * ctx.deltaTimeS(f32);
     if (ctx.key_state[sdl.SDL_SCANCODE_LSHIFT])
         camera_speed *= 2;
     if (ctx.key_state[sdl.SDL_SCANCODE_W])
@@ -317,12 +354,6 @@ fn processCameraInput(ctx: *Context) void {
     const view_input = &ctx.appstate.render.view_input;
     view_input.yaw += mouse_x * camera_sensitivity;
     view_input.pitch = @max(@min(view_input.pitch - mouse_y * camera_sensitivity, 89), -89);
-    std.log.info(
-        \\yaw = {}
-        \\pitch = {}
-        \\relx = {}
-        \\rely = {}
-    , .{ view_input.yaw, view_input.pitch, mouse_x, mouse_y });
     const direction: Vec3 = .vec3(
         @cos(math.radians(view_input.yaw)) * @cos(math.radians(view_input.pitch)),
         @sin(math.radians(view_input.pitch)),

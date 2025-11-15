@@ -11,22 +11,22 @@
   - [x] Transformations
   - [x] Coordinate Systems
   - [x] Camera
-- [ ] Lighting
+- [x] Lighting
   - [x] Colors
   - [x] Basic Lighting
   - [x] Materials
   - [x] Lighting Maps
   - [x] Light Casters
-  - [ ] Multiple Lights
-- [ ] Model Loading
-  - [ ] Assimp
-  - [ ] Mesh
-  - [ ] Model
+  - [x] Multiple Lights
+- [x] Model Loading
+  - [x] Assimp
+  - [x] Mesh
+  - [x] Model
 - [ ] Advanced OpenGL
   - [ ] Depth Testing
   - [ ] Stencil Testing
   - [ ] Blending
-  - [ ] Face Culling
+  - [x] Face Culling
   - [ ] Framebuffers
   - [ ] Cubemaps
   - [ ] Advanced Data

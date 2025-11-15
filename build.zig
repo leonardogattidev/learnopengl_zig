@@ -10,8 +10,10 @@ pub fn build(b: *std.Build) void {
     });
     mod.addImport("self", mod);
 
-    const engine_dep = b.dependency("engine", .{ .optimize = optimize, .target = target });
+    const engine_dep = b.dependency("engine", .{ .optimize = .ReleaseSafe, .target = target });
     mod.addImport("engine", engine_dep.module("engine"));
+    const engine_lib = engine_dep.artifact("engine_lib");
+    mod.linkLibrary(engine_lib);
 
     const exe = b.addExecutable(.{
         .name = "learn_opengl",

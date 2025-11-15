@@ -19,7 +19,6 @@ struct PointLight {
   vec3 diffuse;
   vec3 specular;
 };
-#define NR_POINT_LIGHTS 4
 
 struct SpotLight {
   vec3 position;
@@ -36,6 +35,14 @@ struct SpotLight {
   float quadratic;
 };
 
+struct Material {
+  sampler2D diffuse;
+  sampler2D specular;
+  float shininess;
+};
+
+#define NR_POINT_LIGHTS 4
+
 in VS_OUT {
   DirectionalLight directional_light;
   PointLight point_lights[NR_POINT_LIGHTS];
@@ -43,15 +50,9 @@ in VS_OUT {
 } fs_in;
 in vec3 vNormal;
 in vec3 vFragPos;
-in vec2 vTexCoords;
+in vec2 vUv;
 
 out vec4 FragColor;
-
-struct Material {
-  sampler2D diffuse;
-  sampler2D specular;
-  float shininess;
-};
 
 uniform Material material;
 
@@ -61,12 +62,12 @@ vec3 calculate_directional_light(DirectionalLight light, vec3 normal, vec3 to_vi
 
   float diffuse_factor = max(dot(normal, to_light_dir), 0.0);
 
-  vec3 to_reflection_dir = reflect(from_light_dir, normal);
-  float reflection_angle = max(dot(to_view_dir, to_reflection_dir), 0.0);
-  float specular_factor = pow(reflection_angle, material.shininess);
+  vec3 halfway = normalize(to_view_dir + to_light_dir);
+  float reflection_angle = max(dot(normal, halfway), 0.0);
+  float specular_factor = pow(reflection_angle, material.shininess) * float(diffuse_factor > 0.0);
 
-  vec3 diffuse_sample = texture(material.diffuse, vTexCoords).rgb;
-  vec3 specular_sample = texture(material.specular, vTexCoords).rgb;
+  vec3 diffuse_sample = texture(material.diffuse, vUv).rgb;
+  vec3 specular_sample = texture(material.specular, vUv).rgb;
 
   vec3 ambient = light.ambient * diffuse_sample;
   vec3 diffuse = light.diffuse * diffuse_factor * diffuse_sample;
@@ -82,9 +83,9 @@ vec3 calculate_point_light(PointLight light, vec3 normal, vec3 frag_pos, vec3 to
 
   float diffuse_factor = max(dot(normal, to_light_dir), 0.0);
 
-  vec3 to_reflection_dir = reflect(from_light_dir, normal);
-  float reflection_angle = max(dot(to_view_dir, to_reflection_dir), 0.0);
-  float specular_factor = pow(reflection_angle, material.shininess);
+  vec3 halfway = normalize(to_view_dir + to_light_dir);
+  float reflection_angle = max(dot(normal, halfway), 0.0);
+  float specular_factor = pow(reflection_angle, material.shininess) * float(diffuse_factor > 0.0);
 
   float to_light_dist = length(to_light);
   float attenuation = 1.0 / (
@@ -92,8 +93,8 @@ vec3 calculate_point_light(PointLight light, vec3 normal, vec3 frag_pos, vec3 to
           to_light_dist + light.quadratic *
           (to_light_dist * to_light_dist));
 
-  vec3 diffuse_sample = texture(material.diffuse, vTexCoords).rgb;
-  vec3 specular_sample = texture(material.specular, vTexCoords).rgb;
+  vec3 diffuse_sample = texture(material.diffuse, vUv).rgb;
+  vec3 specular_sample = texture(material.specular, vUv).rgb;
 
   vec3 ambient = light.ambient * diffuse_sample;
   vec3 diffuse = light.diffuse * diffuse_factor * diffuse_sample;
@@ -113,9 +114,9 @@ vec3 calculate_spot_light(SpotLight light, vec3 normal, vec3 frag_pos, vec3 to_v
 
   float diffuse_factor = max(dot(normal, to_light_dir), 0.0);
 
-  vec3 to_reflection_dir = reflect(from_light_dir, normal);
-  float reflection_angle = max(dot(to_view_dir, to_reflection_dir), 0.0);
-  float specular_factor = pow(reflection_angle, material.shininess);
+  vec3 halfway = normalize(to_view_dir + to_light_dir);
+  float reflection_angle = max(dot(normal, halfway), 0.0);
+  float specular_factor = pow(reflection_angle, material.shininess) * float(diffuse_factor > 0.0);
 
   float to_light_dist = length(to_light);
   float attenuation = 1.0 / (
@@ -127,8 +128,8 @@ vec3 calculate_spot_light(SpotLight light, vec3 normal, vec3 frag_pos, vec3 to_v
   float epsilon = light.cutoff - light.outer_cutoff;
   float intensity = clamp((theta - light.outer_cutoff) / epsilon, 0.0, 1.0);
 
-  vec3 diffuse_sample = texture(material.diffuse, vTexCoords).rgb;
-  vec3 specular_sample = texture(material.specular, vTexCoords).rgb;
+  vec3 diffuse_sample = texture(material.diffuse, vUv).rgb;
+  vec3 specular_sample = texture(material.specular, vUv).rgb;
 
   vec3 ambient = light.ambient * diffuse_sample;
   vec3 diffuse = light.diffuse * diffuse_factor * diffuse_sample;
@@ -143,8 +144,9 @@ vec3 calculate_spot_light(SpotLight light, vec3 normal, vec3 frag_pos, vec3 to_v
 void main() {
   vec3 normal = normalize(vNormal);
   vec3 to_view_dir = normalize(-vFragPos);
+  vec3 color = vec3(0.0,0.0,0.0);
 
-  vec3 color = calculate_directional_light(fs_in.directional_light, normal, to_view_dir);
+  color += calculate_directional_light(fs_in.directional_light, normal, to_view_dir);
 
   for (int i = 0; i < NR_POINT_LIGHTS; i++)
     color += calculate_point_light(fs_in.point_lights[i], normal, vFragPos, to_view_dir);
@@ -153,38 +155,3 @@ void main() {
   FragColor = vec4(color, 1.0);
 }
 
-// void coso() {
-//   vec3 diffuse_sample = texture(material.diffuse, vTexCoords).rgb;
-//   vec3 ambient = light.ambient * diffuse_sample;
-//
-//   vec3 frag_to_light = -vFragPos;
-//   vec3 frag_to_light_dir = normalize(frag_to_light);
-//
-//   vec3 norm = normalize(vNormal);
-//   float diff = max(dot(norm, frag_to_light_dir), 0.0);
-//   vec3 diffuse = light.diffuse * diff * diffuse_sample;
-//
-//   vec3 reflection_dir = reflect(-frag_to_light_dir, norm);
-//   float reflection_angle = max(dot(to_view_dir, reflection_dir), 0.0);
-//   float spec = pow(reflection_angle, material.shininess);
-//   vec3 specular_sample = texture(material.specular, vTexCoords).rgb;
-//   vec3 specular = light.specular * (spec * specular_sample);
-//
-//   vec3 spotlight_orientation = vec3(0.0, 0.0, -1.0); // normalized
-//   float theta = dot(frag_to_light_dir, -spotlight_orientation);
-//   float epsilon = light.cutoff - light.outer_cutoff;
-//   float intensity = clamp((theta - light.outer_cutoff) / epsilon, 0.0, 1.0);
-//   diffuse *= intensity;
-//   specular *= intensity;
-//
-//   float frag_to_light_dist = length(frag_to_light);
-//   float attenuation = 1.0 / (
-//       light.constant + light.linear *
-//           frag_to_light_dist + light.quadratic *
-//           (frag_to_light_dist * frag_to_light_dist));
-//   ambient *= attenuation;
-//   diffuse *= attenuation;
-//   specular *= attenuation;
-//
-//   FragColor = vec4(ambient + diffuse + specular, 1.0);
-// }
