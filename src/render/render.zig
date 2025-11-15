@@ -19,41 +19,51 @@ const TextureBindings = Renderable.Material.TextureBindings;
 const Binding = TextureBindings.Binding;
 const cube = @import("cube.zig");
 
-pub fn setupMeshes(gpa: Allocator, meshes: []MeshData) ![]const c_uint {
-    const vaos = try gpa.alloc(c_uint, meshes.len);
-    gl.GenVertexArrays(@intCast(vaos.len), vaos.ptr);
+pub fn setupMeshes(gpa: Allocator, context: *types.ContextManager, resources: *types.ResourceManager, meshes: []MeshData) ![]const types.VertexArray {
+    // const vaos = try gpa.alloc(c_uint, meshes.len);
+    // gl.GenVertexArrays(@intCast(vaos.len), vaos.ptr);
+    const vaos = try context.vaos.addMany(gpa, meshes.len);
     for (meshes, vaos) |mesh, vao| {
-        gl.BindVertexArray(vao);
+        context.vaos.bind(vao);
 
         const buffer_count = 4;
-        const buffer_objects = try gpa.alloc(c_uint, buffer_count);
-        gl.GenBuffers(buffer_count, buffer_objects.ptr);
+        const buffers = try resources.buffers.addMany(gpa, buffer_count);
 
-        const ebo = buffer_objects[0];
-        gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
-        const indices: []const u8 = std.mem.sliceAsBytes(mesh.indices);
-        gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, @intCast(indices.len), indices.ptr, gl.STATIC_DRAW);
+        const ebo = buffers[0].resource;
+        context.buffers.bind(.element_array, ebo);
+        context.buffers.setData(.element_array, std.mem.sliceAsBytes(mesh.indices), .static_draw);
 
-        const vbo_positions = buffer_objects[1];
-        gl.BindBuffer(gl.ARRAY_BUFFER, vbo_positions);
-        const vertices_positions: []const u8 = std.mem.sliceAsBytes(mesh.vertices.items(.position));
-        gl.BufferData(gl.ARRAY_BUFFER, @intCast(vertices_positions.len), vertices_positions.ptr, gl.STATIC_DRAW);
-        gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 0, 0);
         gl.EnableVertexAttribArray(0);
 
-        const vbo_normals = buffer_objects[2];
-        gl.BindBuffer(gl.ARRAY_BUFFER, vbo_normals);
-        const vertices_normals: []const u8 = std.mem.sliceAsBytes(mesh.vertices.items(.normal));
-        gl.BufferData(gl.ARRAY_BUFFER, @intCast(vertices_normals.len), vertices_normals.ptr, gl.STATIC_DRAW);
-        gl.VertexAttribPointer(1, 3, gl.FLOAT, gl.FALSE, 0, 0);
-        gl.EnableVertexAttribArray(1);
+        const vbo_positions = buffers[1].resource;
+        context.buffers.bind(.array, vbo_positions);
+        context.buffers.setData(
+            .array,
+            std.mem.sliceAsBytes(mesh.vertices.items(.position)),
+            .static_draw,
+        );
+        context.vaos.attributePointer(.{ .index = 0, .size = 3 });
+        context.vaos.enableVertexAttribArray(0);
 
-        const vbo_uvs = buffer_objects[3];
-        gl.BindBuffer(gl.ARRAY_BUFFER, vbo_uvs);
-        const vertices_uvs: []const u8 = std.mem.sliceAsBytes(mesh.vertices.items(.uv));
-        gl.BufferData(gl.ARRAY_BUFFER, @intCast(vertices_uvs.len), vertices_uvs.ptr, gl.STATIC_DRAW);
-        gl.VertexAttribPointer(2, 2, gl.FLOAT, gl.FALSE, 0, 0);
-        gl.EnableVertexAttribArray(2);
+        const vbo_normals = buffers[2].resource;
+        context.buffers.bind(.array, vbo_normals);
+        context.buffers.setData(
+            .array,
+            std.mem.sliceAsBytes(mesh.vertices.items(.normal)),
+            .static_draw,
+        );
+        context.vaos.attributePointer(.{ .index = 1, .size = 3 });
+        context.vaos.enableVertexAttribArray(1);
+
+        const vbo_uvs = buffers[3].resource;
+        context.buffers.bind(.array, vbo_uvs);
+        context.buffers.setData(
+            .array,
+            std.mem.sliceAsBytes(mesh.vertices.items(.uv)),
+            .static_draw,
+        );
+        context.vaos.attributePointer(.{ .index = 2, .size = 2 });
+        context.vaos.enableVertexAttribArray(2);
     }
     return vaos;
 }
@@ -107,7 +117,7 @@ pub fn setup(ctx: *Context) !void {
     defer result.deinit(gpa);
 
     const renderables = try render.renderables.addManyAsSlice(gpa, result.renderables.len);
-    const vaos = try setupMeshes(gpa, result.meshes);
+    const vaos = try setupMeshes(gpa, &render.context, &render.resources, result.meshes);
     const textures = try setup2DTextures(gpa, result.textures);
     std.debug.assert(textures.len == 2);
     for (renderables, result.meshes, vaos, result.renderables) |*renderable, mesh, vao, render_item| {
@@ -156,7 +166,7 @@ pub fn setup(ctx: *Context) !void {
                 .textures = tex_bindings,
             },
             .mesh = .{
-                .vao = .{ .handle = .{ .value = vao } },
+                .vao = vao,
             },
             .draw_params = .{
                 .draw_elements = .{

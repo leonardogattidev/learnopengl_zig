@@ -30,7 +30,7 @@ pub const Mesh = struct {
     vao: VertexArray,
 
     pub fn bind(self: Mesh, context: *ContextManager) void {
-        context.vao.bind(self.vao);
+        context.vaos.bind(self.vao);
     }
 };
 
