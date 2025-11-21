@@ -36,9 +36,6 @@ pub fn setup(ctx: *Context) !void {
     }));
 
     try Model.setupModel(ctx, phong_shader);
-    const cube_renderable = try render.renderables.addOne(gpa);
-
-    cube_renderable.* = try cube.getRenderable(ctx);
 
     render.projection = math.Mat4.perspective(45, 640 / 480, 0.1, 100);
 
@@ -60,15 +57,17 @@ pub fn setup(ctx: *Context) !void {
     // gl.FrontFace(gl.CCW);
 
     gl.Enable(gl.DEPTH_TEST);
-    // gl.Enable(gl.MULTISAMPLE);
+    gl.Enable(gl.MULTISAMPLE);
 
-    // var fbo: c_uint = undefined;
-    // gl.GenFramebuffers(1, &fbo);
-    // gl.BindFramebuffer(gl.FRAMEBUFFER, fbo);
-    //
-    // var rbo: c_uint = undefined;
-    // gl.GenRenderbuffers(1, &rbo);
+    fbo = undefined;
+    gl.GenFramebuffers(1, @ptrCast(&fbo));
+    gl.BindFramebuffer(gl.FRAMEBUFFER, fbo);
+    try setRBOs(ctx);
 }
+
+var fbo: c_uint = undefined;
+var rbo_color: c_uint = undefined;
+var rbo_depth_stencil: c_uint = undefined;
 
 const point_light_positions: []const Vec3 = &.{
     .vec3(0.7, 0.2, 2.0),
@@ -96,6 +95,10 @@ pub fn update(ctx: *Context) !void {
         }
     }
 
+    const width = appstate.window_size.width;
+    const height = appstate.window_size.height;
+    gl.BindFramebuffer(gl.FRAMEBUFFER, fbo);
+    // gl.Viewport(0, 0, width, height);
     gl.ClearColor(6.0 / 255.0, 21.0 / 255.0, 88.0 / 255.0, 1);
     gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
@@ -108,9 +111,16 @@ pub fn update(ctx: *Context) !void {
 
     const renderables = render.renderables.items;
     try setupLights(ctx);
-    try renderBasic(ctx, renderables[0 .. renderables.len - 1]);
+    try renderBasic(ctx, renderables);
     // try renderLightSources(ctx, renderables[renderables.len - 1]);
 
+    gl.BindFramebuffer(gl.READ_FRAMEBUFFER, fbo);
+    gl.BindFramebuffer(gl.DRAW_FRAMEBUFFER, 0);
+    gl.BlitFramebuffer( //
+        0, 0, width, height, //
+        0, 0, width, height, //
+        gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    gl.BindFramebuffer(gl.FRAMEBUFFER, 0);
     _ = sdl.SDL_GL_SwapWindow(appstate.window);
 }
 
@@ -236,11 +246,41 @@ fn processCameraInput(ctx: *Context) void {
     camera.front = direction.normalized();
 }
 
-pub fn onEvent(ctx: *Context, event: *sdl.SDL_Event) void {
-    _ = ctx;
+pub fn onEvent(ctx: *Context, event: *sdl.SDL_Event) !void {
     switch (event.type) {
-        sdl.SDL_EVENT_WINDOW_RESIZED => gl.Viewport(0, 0, event.window.data1, event.window.data2),
+        sdl.SDL_EVENT_WINDOW_RESIZED => {
+            const rbos: [2]c_uint = .{ rbo_color, rbo_depth_stencil };
+            gl.DeleteRenderbuffers(2, &rbos);
+            try setRBOs(ctx);
+            gl.Viewport(0, 0, event.window.data1, event.window.data2);
+        },
         else => {},
+    }
+}
+
+fn setRBOs(ctx: *Context) !void {
+    const width = ctx.appstate.window_size.width;
+    const height = ctx.appstate.window_size.height;
+
+    gl.BindFramebuffer(gl.FRAMEBUFFER, fbo);
+    var rbo_handles: [2]c_uint = undefined;
+    gl.GenRenderbuffers(2, &rbo_handles);
+
+    rbo_color = rbo_handles[0];
+    gl.BindRenderbuffer(gl.RENDERBUFFER, rbo_color);
+    const sample_count = 4;
+    gl.RenderbufferStorageMultisample(gl.RENDERBUFFER, sample_count, gl.RGBA8, width, height);
+    gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, rbo_color);
+
+    rbo_depth_stencil = rbo_handles[1];
+    gl.BindRenderbuffer(gl.RENDERBUFFER, rbo_depth_stencil);
+    gl.RenderbufferStorageMultisample(gl.RENDERBUFFER, sample_count, gl.DEPTH24_STENCIL8, width, height);
+    gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, rbo_depth_stencil);
+
+    const fbo_status = gl.CheckFramebufferStatus(gl.FRAMEBUFFER);
+    if (fbo_status != gl.FRAMEBUFFER_COMPLETE) {
+        std.log.info("Framebuffer error, status: {} ", .{fbo_status});
+        return error.framebuffer_error;
     }
 }
 

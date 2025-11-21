@@ -10,6 +10,9 @@ arena_allocator: std.heap.ArenaAllocator,
 allocator: Allocator,
 window: ?*sdl.SDL_Window,
 render: RenderState,
+window_size: WindowSize,
+
+const WindowSize = struct { width: c_int, height: c_int };
 
 pub fn init(self: *AppState) !void {
     self.* = .{
@@ -18,6 +21,7 @@ pub fn init(self: *AppState) !void {
         .allocator = undefined,
         .window = null,
         .render = undefined,
+        .window_size = undefined,
     };
     self.arena_allocator = std.heap.ArenaAllocator.init(self.debug_allocator.allocator());
     self.allocator = self.arena_allocator.allocator();

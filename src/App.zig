@@ -16,10 +16,9 @@ pub fn onInit(ctx: *Context) !Result {
 
     try window.onInit(&ctx.appstate.window);
     {
-        var w: c_int = undefined;
-        var h: c_int = undefined;
-        _ = sdl.SDL_GetWindowSize(ctx.appstate.window, @ptrCast(&w), @ptrCast(&h));
-        gl.Viewport(0, 0, w, h);
+        const window_size = &ctx.appstate.window_size;
+        _ = sdl.SDL_GetWindowSize(ctx.appstate.window, @ptrCast(&window_size.width), @ptrCast(&window_size.height));
+        gl.Viewport(0, 0, window_size.width, window_size.height);
     }
     try render.setup(ctx);
     return .CONTINUE;
@@ -29,9 +28,10 @@ pub fn onEvent(ctx: *Context, event: *sdl.SDL_Event) !Result {
     // _ = ctx;
     switch (event.type) {
         sdl.SDL_EVENT_QUIT => return .SUCCESS,
+        sdl.SDL_EVENT_WINDOW_RESIZED => ctx.appstate.window_size = .{ .width = event.window.data1, .height = event.window.data2 },
         else => {},
     }
-    render.onEvent(ctx, event);
+    try render.onEvent(ctx, event);
     return .CONTINUE;
 }
 
