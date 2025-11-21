@@ -39,7 +39,7 @@ const Result = struct {
 
 pub fn load(gpa: Allocator, file_path: [:0]const u8) !Result {
     const scene: *const assimp.aiScene = scene: {
-        const scene: ?*const assimp.aiScene = assimp.aiImportFile(file_path.ptr, assimp.aiProcess_Triangulate | assimp.aiProcess_FlipUVs);
+        const scene: ?*const assimp.aiScene = assimp.aiImportFile(file_path.ptr, assimp.aiProcess_Triangulate);
 
         if (scene == null or scene.?.mFlags & assimp.AI_SCENE_FLAGS_INCOMPLETE != 0 or scene.?.mRootNode == null) {
             std.log.err("assimp: {s}", .{assimp.aiGetErrorString()});
