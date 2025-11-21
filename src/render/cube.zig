@@ -2,7 +2,7 @@ const std = @import("std");
 const Context = @import("self").Context;
 const Renderable = @import("Renderable.zig");
 const State = @import("State.zig");
-const render_mod = @import("render.zig");
+const Model = @import("Model.zig");
 const MeshData = @import("MeshData.zig");
 
 pub fn getRenderable(ctx: *Context) !Renderable {
@@ -28,7 +28,7 @@ pub fn getRenderable(ctx: *Context) !Renderable {
         break :mesh_data mesh_data;
     };
 
-    const vaos = try render_mod.setupMeshes(gpa, &render.context, &render.resources, @ptrCast(&mesh_data));
+    const vaos = try Model.setupMeshes(gpa, &render.context, &render.resources, @ptrCast(&mesh_data));
     std.debug.assert(1 == vaos.len);
     const light_source_vao = vaos[0];
 
