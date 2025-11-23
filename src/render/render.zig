@@ -28,6 +28,7 @@ pub fn setup(ctx: *Context) !void {
     const resources = &appstate.render.resources;
     const gpa = appstate.allocator;
     if (!sdl.SDL_SetWindowRelativeMouseMode(ctx.appstate.window, true)) return error.could_not_set_relative_mouse_mode;
+    stb_image.stbi_set_flip_vertically_on_load(1);
 
     try resources.programs.store.ensureTotalCapacity(gpa, 3);
     const phong_shader = try resources.programs.new(gpa, .init(.{

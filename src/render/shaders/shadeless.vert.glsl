@@ -15,5 +15,5 @@ void main(){
   vec4 local = vec4(aPosition,1.0);
   gl_Position = projection * view * model * local;
   vNormal = aNormal;
-  vUv = vec2(aUv.x,1.0 - aUv.y);
+  vUv = aUv;
 }

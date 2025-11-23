@@ -65,7 +65,7 @@ void main() {
   gl_Position = projection * view * world_pos;
   vFragPos = vec3(view * world_pos);
   vNormal = mat3(transpose(inverse(view * model))) * aNormal;
-  vUv = vec2(aUv.x,1.0 - aUv.y);
+  vUv = aUv;
 
   vs_out.directional_light = u_directional_light;
   vs_out.directional_light.direction = normalize(mat3(view) * vs_out.directional_light.direction);
